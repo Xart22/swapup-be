@@ -893,9 +893,9 @@ class AuthController extends BaseController
         // }
     }
 
-    protected function sendMailerSetPassword($seller_mail)
+    protected function sendMailerSetPassword($seller_mail, $url_link)
     {
-        $templateMail = config("constants.sendgrid_template_6_");
+        $templateMail = config("constants.sendgrid_template_swapupkit_register_manual");
         $sendGridData = [
             "from" => [
                 "email" => "hello@swapup.com.au"
@@ -906,6 +906,9 @@ class AuthController extends BaseController
                         [
                             "email" => $seller_mail
                         ]
+                    ],
+                    "dynamic_template_data" => [
+                        "url_link" => $url_link
                     ]
                 ]
             ],
@@ -1079,13 +1082,13 @@ class AuthController extends BaseController
                 'last_name' => $input['last_name']
             ]);
 
-            // $sendMailer = $this->sendMailerSetPassword($input["email"]);
+            $sendMailer = $this->sendMailerSetPassword($input["email"]);
 
-            // if ($sendMailer->status() == 202) {
-            //     return response()->json(['message' => 'User registered successfully. Please check email for verify data'], 201);
-            // } else {
-            //     dd($sendMailer);
-            // }
+            if ($sendMailer->status() == 202) {
+                return response()->json(['message' => 'User registered successfully. Please check email for verify data'], 201);
+            } else {
+                dd($sendMailer);
+            }
 
             return response()->json(['message' => 'User registered successfully. Please check email for verify data'], 201);
         } catch (\Exception $e) {

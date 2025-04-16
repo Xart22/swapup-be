@@ -8,6 +8,7 @@ use App\Models\EmailOrderStatus;
 use App\Models\Logs;
 use App\Models\Order;
 use App\Models\SwapUpKit;
+use App\Models\User;
 use App\Models\Variants;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -143,6 +144,59 @@ class OrderController extends Controller
                 'type' => 'Error',
                 'message' => $th->getMessage(),
                 'user_id' => Auth::id(),
+                'variant_id' => $variant->id
+            ]);
+            return Helpers::Response(500, $th->getMessage());
+        }
+    }
+
+
+    public function addNewOrderManual(Request $request)
+    {
+        try {
+
+            DB::beginTransaction();
+            $variant = Variants::find($request->variant->value);
+            $user = User::where('id', $request->user->value)->first();
+
+            $order = Order::create([
+                'user_id' => $request->user->value,
+                'variant_id' => $request->variant->value,
+                'payment_intent_id' => 'Payment at the Store collected by ' . Auth::user()->first_name,
+                'client_secret' => 'Payment at the Store collected by ' . Auth::user()->first_name,
+                'status' => 'Delivered',
+                'stripe_status' => "",
+                'label_generated' => $variant->shipping_label == 0 ? true : false
+            ]);
+
+            if ($variant->shipping_label == 0) {
+                $this->sendEmailOrderManual($order->id, $user);
+            }
+            if ($variant->gift_card_amount != 0) {
+                $data = [
+                    "account" => $user->consign_id,
+                    "balance" => $variant->gift_card_amount * 100,
+                    "barcode" => (string)$order->id,
+                ];
+
+                $this->userConsignServices->createGiftCard($data);
+            }
+
+            Logs::create([
+                'type' => 'Info',
+                'message' => 'Payment succeeded for Order ID: ' . $order->id . ' ' . $variant->title . ' - ' . 'Variant ID : ' . $variant->id . ' - Payment Intent ID :Pay with credit  Shipping Label Required : ' . ($variant->shipping_label == 0 ? 'No' : 'Yes'),
+                'user_id' => $user->id,
+                'order_id' => $order->id,
+                'variant_id' => $variant->id
+            ]);
+            DB::commit();
+            return Helpers::Response(200, 'Payment succeeded.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            Logs::create([
+                'type' => 'Error',
+                'message' => $th->getMessage(),
+                'user_id' => $user->id,
                 'variant_id' => $variant->id
             ]);
             return Helpers::Response(500, $th->getMessage());
@@ -331,12 +385,15 @@ class OrderController extends Controller
 
             if ($order->shipment === null) {
                 $order->status = $request->status;
-                $order->reason_cancel = $request->reason_cancel ?? null;
             } else {
                 $order->shipment->update([
                     'status' => $request->status,
                 ]);
                 $order->status = $request->status;
+            }
+
+            if ($request->status === 'Cancelled') {
+                $this->sendEmailCanceled($order);
             }
 
             if ($request->status === 'Processed') {
@@ -358,6 +415,36 @@ class OrderController extends Controller
     }
 
 
+
+    private function sendEmailCanceled($order)
+    {
+        $templateMail = config("constants.sendgrid_template_swapupkit_cancelled");
+        $sendGridData = [
+            "from" => [
+                "email" => "hello@swapup.com.au"
+            ],
+            "personalizations" => [
+                [
+                    "to" => [
+                        [
+                            "email" => $order->user->email
+                        ]
+                    ],
+                    "bcc" => [
+                        [
+                            "email" => "swapup.au@gmail.com"
+                        ]
+                    ],
+                    "dynamic_template_data" => [
+                        "url" => config("constants.pass_url_"),
+                        "order_id" => $order->id
+                    ]
+                ]
+            ],
+            "template_id" => $templateMail
+        ];
+        $this->sendGridServices->sendMailByTemplate($sendGridData);
+    }
 
     private function sendEmailDelivered($order)
     {
@@ -424,11 +511,11 @@ class OrderController extends Controller
         $this->sendGridServices->sendMailByTemplate($sendGridData);
     }
 
-    private function sendEmailWithStripe($url_label)
+    private function sendEmailOrderManual($order_id, $user)
     {
 
-        // $templateMail = env("SENDRID_TEMPLATE_SWAUPKIT_LABEL_AFTER_PAYMENT");
-        $templateMail = config("constants.sendgrid_template_swapupkit_label_after_payment");
+        // $templateMail = env("SENDRID_TEMPLATE_SWAUPKIT_LABEL_DROP_OFF");
+        $templateMail = config("constants.sendgrid_template_swapupkit_lable_drop_off");
         $sendGridData = [
             "from" => [
                 "email" => "hello@swapup.com.au"
@@ -437,7 +524,7 @@ class OrderController extends Controller
                 [
                     "to" => [
                         [
-                            "email" => Auth::user()->email
+                            "email" => $user->email
                         ]
                     ],
                     "bcc" => [
@@ -446,9 +533,9 @@ class OrderController extends Controller
                         ]
                     ],
                     "dynamic_template_data" => [
-                        "url_label" => $url_label,
-                        "first_name" => Auth::user()->first_name,
-                        "last_name" => ""
+                        "url_maps" => config("constants.url_maps"),
+                        "first_name" => $user->first_name,
+                        "order_id" => $order_id
                     ]
                 ]
             ],

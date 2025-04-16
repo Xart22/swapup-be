@@ -76,6 +76,8 @@ Route::middleware('auth:sanctum', 'admin')->group(function () {
     Route::post('/get-all-order', [OrderController::class, 'getOrderByDate']);
     Route::get('/get-all-order', [OrderController::class, 'getAllOrder']);
     Route::put('/update-order-status', [OrderController::class, 'updateOrderStatus']);
+    Route::post('/add-order', [OrderController::class, 'addNewOrderManual']);
+
 
     Route::get('/manualitem', [ItemsController::class, 'getManualItems']);
     Route::delete('/resetitem', [ItemsController::class, 'resetItems']);

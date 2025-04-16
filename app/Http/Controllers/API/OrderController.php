@@ -156,15 +156,15 @@ class OrderController extends Controller
         try {
 
             DB::beginTransaction();
-            $variant = Variants::find($request->variant->value);
-            $user = User::where('id', $request->user->value)->first();
+            $variant = Variants::find($request->variant_id);
+            $user = User::where('id', $request->user_id)->first();
 
             $order = Order::create([
-                'user_id' => $request->user->value,
-                'variant_id' => $request->variant->value,
-                'payment_intent_id' => 'Payment at the Store collected by ' . Auth::user()->first_name,
-                'client_secret' => 'Payment at the Store collected by ' . Auth::user()->first_name,
-                'status' => 'Delivered',
+                'user_id' => $user->id,
+                'variant_id' => $request->variant_id,
+                'payment_intent_id' => 'N/A',
+                'client_secret' => 'N/A',
+                'status' => 'To Be Sent in',
                 'stripe_status' => "",
                 'label_generated' => $variant->shipping_label == 0 ? true : false
             ]);
@@ -264,7 +264,7 @@ class OrderController extends Controller
     public function getAllOrder(Request $request)
     {
 
-        $order = Order::where('stripe_status', '!=', 'requires_payment_method')->with('shipment', 'variant', 'user')->orderBy('created_at', 'desc')->get();
+        $order = Order::where('stripe_status', '!=', 'requires_payment_method')->orderBy('id', 'desc')->with('shipment', 'variant', 'user')->get();
 
         $kit = SwapUpKit::first();
 
@@ -394,6 +394,7 @@ class OrderController extends Controller
 
             if ($request->status === 'Cancelled') {
                 $this->sendEmailCanceled($order);
+                $order->reason_cancel = $request->reason_cancel;
             }
 
             if ($request->status === 'Processed') {
@@ -436,8 +437,8 @@ class OrderController extends Controller
                         ]
                     ],
                     "dynamic_template_data" => [
-                        "url" => config("constants.pass_url_"),
-                        "order_id" => $order->id
+                        "order_id" => $order->id,
+                        "first_name" => $order->user->first_name,
                     ]
                 ]
             ],

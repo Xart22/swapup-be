@@ -853,6 +853,11 @@ class AuthController extends BaseController
                             "email" => $seller_mail
                         ]
                     ],
+                    "bcc" => [
+                        [
+                            "email" => "swapup.au@gmail.com"
+                        ]
+                    ],
                     "dynamic_template_data" => [
                         "url_verify" => $url_verify
                     ]
